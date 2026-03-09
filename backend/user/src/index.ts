@@ -2,6 +2,7 @@ import dotenv from "dotenv";
 import mongoose from "mongoose";
 import app from "./app";
 import { createClient } from "redis";
+import { connectRabbitMQ } from "../config/rabbitmq";
 
 dotenv.config();
 
@@ -11,7 +12,7 @@ const mongoUri = process.env.MONGODB_URI;
 if (!mongoUri) {
   throw new Error("MONGODB_URI is not configured");
 }
-
+connectRabbitMQ();
 export const redisClient = createClient({ url: process.env.REDIS_URL });
 
 redisClient
