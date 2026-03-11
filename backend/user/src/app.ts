@@ -1,5 +1,6 @@
 import cors from "cors";
 import express from "express";
+import { errorHandler } from "./config/errorHandler";
 import authRoutes from "./routes/authRoutes";
 
 const app = express();
@@ -12,5 +13,6 @@ app.get("/health", (_req, res) => {
 });
 
 app.use("/api/auth", authRoutes);
+app.use(errorHandler);
 
 export default app;

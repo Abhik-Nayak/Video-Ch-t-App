@@ -2,7 +2,7 @@ import dotenv from "dotenv";
 import mongoose from "mongoose";
 import app from "./app";
 import { createClient } from "redis";
-import { connectRabbitMQ } from "../config/rabbitmq";
+import { connectRabbitMQ } from "./config/rabbitmq";
 
 dotenv.config();
 
