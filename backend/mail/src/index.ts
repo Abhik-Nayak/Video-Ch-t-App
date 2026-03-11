@@ -5,10 +5,10 @@ const app = express();
 
 dotenv.config();
 
-const port = Number(process.env.PORT) || 5000;
+const port = Number(process.env.PORT) || 4001;
 
 app.listen(port, () => {
-  console.log(`Mail service running on port ${port} ${port}`);
+  console.log(`Mail service running on port ${port}.`);
 });
 startSendOtpConsumer();
 

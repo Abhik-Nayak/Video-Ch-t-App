@@ -70,15 +70,10 @@ export const signup = tryCatch(
 
 export const signin = tryCatch(
   async (req: Request, res: Response): Promise<Response> => {
-    const { email, password } = req.body as {
-      email?: string;
-      password?: string;
-    };
+    const { email } = req.body as { email: string };
 
-    if (!email || !password) {
-      return res
-        .status(400)
-        .json({ message: "email and password are required" });
+    if (!email) {
+      return res.status(400).json({ message: "email is required" });
     }
 
     const normalizedEmail = email.toLowerCase();
@@ -103,16 +98,6 @@ export const signin = tryCatch(
       });
     }
 
-    // const user = await User.findOne({ email: normalizedEmail });
-    // if (!user) {
-    //   return res.status(401).json({ message: "Invalid credentials" });
-    // }
-
-    // const isPasswordValid = await bcrypt.compare(password, user.password);
-    // if (!isPasswordValid) {
-    //   return res.status(401).json({ message: "Invalid credentials" });
-    // }
-
     const otp = generateOtp();
     const otpKey = `otp:signin:${normalizedEmail}`;
     await redisClient.setEx(otpKey, OTP_EXPIRY_SECONDS, otp);
@@ -122,8 +107,54 @@ export const signin = tryCatch(
       body: `Your OTP is ${otp}. It will expire in ${Math.ceil(OTP_EXPIRY_SECONDS / 60)} minutes.`,
     });
 
-    await redisClient.del(loginRateLimitKey);
+    // this line delete limit so it reset
+    // await redisClient.del(loginRateLimitKey);
 
     return res.status(200).json({ message: "OTP sent to your mail" });
+  },
+);
+
+export const verifyUser = tryCatch(
+  async (req: Request, res: Response): Promise<Response> => {
+    const { email, otp } = req.body as { email?: string; otp?: string };
+
+    if (!email || !otp) {
+      return res.status(400).json({ message: "email and otp are required" });
+    }
+
+    const normalizedEmail = email.toLowerCase();
+    const otpKey = `otp:signin:${normalizedEmail}`;
+    const storedOtp = await redisClient.get(otpKey);
+
+    if (!storedOtp) {
+      return res
+        .status(400)
+        .json({ message: "OTP expired or not requested for this email" });
+    }
+
+    if (storedOtp !== otp) {
+      return res.status(400).json({ message: "Invalid OTP" });
+    }
+
+    let user = await User.findOne({ email: normalizedEmail });
+    if (!user) {
+      const name = email.slice(0, 8);
+      user = await User.create({ name, email });
+    }
+
+    await redisClient.del(otpKey);
+    await redisClient.del(`rate-limit:signin:${normalizedEmail}`);
+
+    const token = jwtAuthToken(user._id.toString());
+
+    return res.status(200).json({
+      message: "User verified successfully",
+      token,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+      },
+    });
   },
 );
