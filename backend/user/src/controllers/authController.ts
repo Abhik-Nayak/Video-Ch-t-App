@@ -1,7 +1,8 @@
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
+import mongoose from "mongoose";
 import { Request, Response } from "express";
-import jwt from "jsonwebtoken";
+import { jwtAuthToken } from "../config/jwt";
 import { publishToQueue } from "../config/rabbitmq";
 import { tryCatch } from "../config/tryCatch";
 import User from "../models/User";
@@ -18,55 +19,6 @@ const OTP_EXPIRY_SECONDS = Number(process.env.OTP_EXPIRY_SECONDS || 300); // 5mi
 const generateOtp = (): string => {
   return crypto.randomInt(0, 1_000_000).toString().padStart(6, "0");
 };
-
-const jwtAuthToken = (userId: string): string => {
-  const secret = process.env.JWT_SECRET;
-  if (!secret) {
-    throw new Error("JWT_SECRET is not configured");
-  }
-
-  return jwt.sign({ userId }, secret, { expiresIn: "7d" });
-};
-
-export const signup = tryCatch(
-  async (req: Request, res: Response): Promise<Response> => {
-    const { name, email, password } = req.body as {
-      name?: string;
-      email?: string;
-      password?: string;
-    };
-
-    if (!name || !email || !password) {
-      return res
-        .status(400)
-        .json({ message: "name, email, and password are required" });
-    }
-
-    const existingUser = await User.findOne({ email: email.toLowerCase() });
-    if (existingUser) {
-      return res.status(409).json({ message: "Email is already registered" });
-    }
-
-    const hashedPassword = await bcrypt.hash(password, 10);
-    const user = await User.create({
-      name,
-      email: email.toLowerCase(),
-      password: hashedPassword,
-    });
-
-    const token = jwtAuthToken(user._id.toString());
-
-    return res.status(201).json({
-      message: "Signup successful",
-      token,
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-      },
-    });
-  },
-);
 
 export const signin = tryCatch(
   async (req: Request, res: Response): Promise<Response> => {
@@ -106,9 +58,6 @@ export const signin = tryCatch(
       subject: "Your OTP Code",
       body: `Your OTP is ${otp}. It will expire in ${Math.ceil(OTP_EXPIRY_SECONDS / 60)} minutes.`,
     });
-
-    // this line delete limit so it reset
-    // await redisClient.del(loginRateLimitKey);
 
     return res.status(200).json({ message: "OTP sent to your mail" });
   },
@@ -155,6 +104,113 @@ export const verifyUser = tryCatch(
         name: user.name,
         email: user.email,
       },
+    });
+  },
+);
+
+export const profile = tryCatch(
+  async (_req: Request, res: Response): Promise<Response> => {
+    const userId = res.locals.userId as string | undefined;
+
+    if (!userId) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    const user = await User.findById(userId).select("-password");
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    return res.status(200).json({
+      message: "Profile fetched successfully",
+      user,
+    });
+  },
+);
+
+export const updateProfile = tryCatch(
+  async (req: Request, res: Response): Promise<Response> => {
+    const userId = res.locals.userId as string | undefined;
+    const { name, email } = req.body as {
+      name?: string;
+      email?: string;
+    };
+
+    if (!userId) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    if (!name && !email) {
+      return res
+        .status(400)
+        .json({ message: "name or email is required to update profile" });
+    }
+
+    const updateData: { name?: string; email?: string } = {};
+
+    if (name) {
+      updateData.name = name;
+    }
+
+    if (email) {
+      const normalizedEmail = email.toLowerCase();
+      const existingUser = await User.findOne({
+        email: normalizedEmail,
+        _id: { $ne: userId },
+      });
+
+      if (existingUser) {
+        return res.status(409).json({ message: "Email is already registered" });
+      }
+
+      updateData.email = normalizedEmail;
+    }
+
+    const user = await User.findByIdAndUpdate(userId, updateData, {
+      new: true,
+      runValidators: true,
+    }).select("-password");
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    return res.status(200).json({
+      message: "Profile updated successfully",
+      user,
+    });
+  },
+);
+
+export const getAllUser = tryCatch(
+  async (_req: Request, res: Response): Promise<Response> => {
+    const users = await User.find().sort({ createdAt: -1 });
+
+    return res.status(200).json({
+      message: "Users fetched successfully",
+      users,
+    });
+  },
+);
+
+export const getUserById = tryCatch(
+  async (req: Request, res: Response): Promise<Response> => {
+    const { id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: "Invalid user id" });
+    }
+
+    const user = await User.findById(id);
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    return res.status(200).json({
+      message: "User fetched successfully",
+      user,
     });
   },
 );

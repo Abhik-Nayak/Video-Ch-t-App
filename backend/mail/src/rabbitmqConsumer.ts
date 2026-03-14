@@ -1,6 +1,7 @@
 import amqp from "amqplib";
-import nodemailer from "nodemailer";
 import dotenv from "dotenv";
+import { sendMail } from "./config/mailer";
+
 dotenv.config();
 
 export const startSendOtpConsumer = async () => {
@@ -26,17 +27,7 @@ export const startSendOtpConsumer = async () => {
         try {
           const { to, subject, body } = JSON.parse(msg.content.toString());
 
-          const transporter = nodemailer.createTransport({
-            host: "smtp.gmail.com",
-            port: 465,
-            auth: {
-              user: process.env.SMTP_USER,
-              pass: process.env.SMTP_PASS,
-            },
-          });
-
-          await transporter.sendMail({
-            from: "Chat App",
+          await sendMail({
             to,
             subject,
             text: body,
