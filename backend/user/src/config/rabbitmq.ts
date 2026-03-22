@@ -11,6 +11,9 @@ export const connectRabbitMQ = async () => {
       username: process.env.Rabbitmq_Username,
       password: process.env.Rabbitmq_Password,
     });
+    // const connection = await amqp.connect(
+    //   `amqp://${process.env.Rabbitmq_Username}:${process.env.Rabbitmq_Password}@${process.env.Rabbitmq_Host}:5672`,
+    // );
 
     channel = await connection.createChannel();
 
@@ -28,11 +31,7 @@ export const publishToQueue = async (queueName: string, message: any) => {
 
   await channel.assertQueue(queueName, { durable: true });
 
-  channel.sendToQueue(
-    queueName,
-    Buffer.from(JSON.stringify(message)),
-    {
-      persistent: true,
-    }
-  );
+  channel.sendToQueue(queueName, Buffer.from(JSON.stringify(message)), {
+    persistent: true,
+  });
 };
